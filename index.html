@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess-like Game</title>
+    <style>
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(5, 50px);
+            grid-template-rows: repeat(5, 50px);
+            gap: 5px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .player-1 { background-color: lightblue; }
+        .player-2 { background-color: lightcoral; }
+        .selected { outline: 2px solid yellow; }
+    </style>
+</head>
+<body>
+    <h1>Chess-like Game</h1>
+    <div id="game-board"></div>
+    <script>
+        const ws = new WebSocket('ws://localhost:8080');
+        let selectedCharacter = null;
+        let gameState = null;
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'update') {
+                gameState = data.state;
+                renderGameState(gameState);
+            }
+        };
+
+        function renderGameState(state) {
+            const boardElement = document.getElementById('game-board');
+            boardElement.innerHTML = '';
+
+            state.grid.forEach((row, rowIndex) => {
+                row.forEach((cell, colIndex) => {
+                    const cellElement = document.createElement('div');
+                    cellElement.classList.add('cell');
+
+                    if (cell) {
+                        cellElement.classList.add(`player-${cell.player}`);
+                        cellElement.textContent = cell.type;
+                        cellElement.onclick = () => selectCharacter(rowIndex, colIndex, cell);
+                    } else if (selectedCharacter) {
+                        cellElement.onclick = () => moveCharacter(rowIndex, colIndex);
+                    }
+
+                    if (selectedCharacter && selectedCharacter.row === rowIndex && selectedCharacter.col === colIndex) {
+                        cellElement.classList.add('selected');
+                    }
+
+                    boardElement.appendChild(cellElement);
+                });
+            });
+        }
+
+        function selectCharacter(row, col, character) {
+            if (character.player === gameState.currentPlayer) {
+                selectedCharacter = { row, col, character };
+                renderGameState(gameState); // Re-render the grid to show selected state
+            }
+        }
+
+        function moveCharacter(newRow, newCol) {
+            if (!selectedCharacter) return;
+
+            const moveCommand = {
+                type: 'move',
+                playerId: selectedCharacter.character.player,
+                characterIndex: selectedCharacter.character.index,
+                move: {
+                    from: { row: selectedCharacter.row, col: selectedCharacter.col },
+                    to: { row: newRow, col: newCol },
+                },
+            };
+
+            ws.send(JSON.stringify(moveCommand));
+            selectedCharacter = null; // Deselect after move
+        }
+
+        // Initialize the game
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'initialize' }));
+        };
+    </script>
+</body>
+</html>
